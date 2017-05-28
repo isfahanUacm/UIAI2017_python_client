@@ -20,3 +20,8 @@ class Cell:
 
     def set_checker(self,newChecker):
         self.__checker = newChecker
+
+    def get_neighbors(self):
+        self.__nbrs = []
+        x1 = self.__pos.getx()
+        x2 = self.__pos.gety()

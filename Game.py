@@ -48,12 +48,12 @@ class Game:
         while(True):
             data = str(simplelinesplit(self.__socket))
             if data is None or len(data) == 0 or data == "FINISH":
-                print("Game is Over")
                 break
             self.play_round(data)
 
 
     def play_round(self,message):
+        self.__dooz = False
         self.__board.update(message[0:47])
         message = message[48:]
         ss = list(map(int,message.split(',')))
@@ -62,11 +62,11 @@ class Game:
         self.__cycle = ss[2]
 
         if self.__myinhandcheckernum > 0:
-            dooz = put_strategy(self)
+            put_strategy(self)
         else:
-            dooz = move_strategy(self)
+            move_strategy(self)
 
-        if dooz:
+        if self.__dooz:
             pop_strategy(self)
 
         self.__socket.sendall(bytes("%s\n" % self.__msg_send, "utf-8"))
@@ -77,17 +77,31 @@ class Game:
     def getOppinhandcheckernum(self):
         return self.__oppinhandcheckernum
 
+    def update_cell_arrays(self):
+        self.__board.get_emptycells().clear()
+        self.__board.get_mycells().clear()
+        self.__board.get_oppcells().clear()
+
+        for i in range(0, 8):
+            for j in range(0, 3):
+                c = self.__board.get_cell(i, j)
+                if c.get_checker() == None:
+                    self.__board.get_emptycells().append(c)
+                elif c.get_checker().isMyChecker() == True:
+                    self.__board.get_mycells().append(c)
+                else:
+                    self.__board.get_oppcells().append(c)
+
+
     def put(self,p):
-        self.__msg_send= "put %d,%d" % (p.getx(), p.gety())
-        cell = self.__board.get_cell(p = p)
-        cell.set_checker(Checker(cell, 'm'))
-        return self.is_line(p)
+        self.__msg_send = "put %d,%d" % (p.getx(), p.gety())
+        self.__board.get_cell(p=p).set_checker(Checker(self.__board.get_cell(p = p), 'm'))
+        self.update_cell_arrays()
+        self.checkdooz(p=p)
 
     def pop(self,c):
-        if c:
-            cell = self.__board.get_cell(p=c.get_pos())
-            cell.set_checker(None)
-            self.__msg_send += " %d,%d" %(c.get_pos().getx(), c.get_pos().gety())
+        self.__msg_send += " %d,%d" %(c.get_pos().getx(), c.get_pos().gety())
+        self.__board.get_cell(p=c.get_pos()).set_checker(None)
 
     def move(self, c, newpos):
         self.__msg_send = "mov %d,%d,%d,%d" % (c.get_pos().getx(), c.get_pos().gety(), newpos.getx(), newpos.gety())
@@ -95,7 +109,37 @@ class Game:
         newcell = self.__board.get_cell(p = newpos)
         cell.set_checker(None)
         newcell.set_checker(Checker(newcell,'m'))
-        return self.is_line(newpos)
+        self.update_cell_arrays()
+        self.checkdooz(newpos)
+
+    def checkdooz(self,p):
+        self.__status = True
+        for j in range(0,3):
+            if self.__board.get_cell(p.getx(),j).get_checker() == None or self.__board.get_cell(p.getx(),j).get_checker().isMyChecker() == False:
+                self.__status = False
+        if self.__status:
+            self.__dooz = True
+            return
+
+        self.__status = True
+        if p.getx() % 2 == 0:
+            for i in range(0,3):
+                if self.__board.get_cell((p.getx() + i) % 8, p.gety()).get_checker() == None or self.__board.get_cell((p.getx() + i) % 8, p.gety()).get_checker().isMyChecker()==False:
+                    self.__status = False
+            if self.__status:
+                self.__dooz = True
+                return
+            self.__status = True
+            for i in range(0,3):
+                if self.__board.get_cell((p.getx() - i + 8) % 8, p.gety()).get_checker() == None or self.__board.get_cell((p.getx() - i + 8) % 8, p.gety()).get_checker().isMyChecker()==False:
+                    self.__status = False
+        else:
+            for i in range(-1,2):
+                if self.__board.get_cell((p.getx() + i) % 8, p.gety()).get_checker() == None or self.__board.get_cell((p.getx() + i) % 8, p.gety()).get_checker().isMyChecker()==False:
+                    self.__status = False
+        if self.__status:
+            self.__dooz = True
+
 
     def is_line(self, p):
         board = self.get_board()
@@ -103,33 +147,33 @@ class Game:
         y = cell.get_pos().gety()
         x = cell.get_pos().getx()
         if board.get_cell(x, 0).get_checker() is not None and \
-            board.get_cell(x, 1).get_checker() is not None and \
-            board.get_cell(x, 2).get_checker() is not None and \
-                board.get_cell(x, 0).get_checker().isMyChecker() == board.get_cell(x, 1).get_checker().isMyChecker() \
+                        board.get_cell(x, 1).get_checker() is not None and \
+                        board.get_cell(x, 2).get_checker() is not None and \
+                        board.get_cell(x, 0).get_checker().isMyChecker() == board.get_cell(x, 1).get_checker().isMyChecker() \
                 and board.get_cell(x, 0).get_checker().isMyChecker() == board.get_cell(x, 2).get_checker().isMyChecker():
             return True
 
         if x % 2 == 0:
 
-            if   board.get_cell((x) % 8, y).get_checker() is not None and\
-                 board.get_cell((x - 1) % 8, y).get_checker() is not None and\
-                 board.get_cell((x - 2) % 8, y).get_checker() is not None and\
-                 board.get_cell((x - 1) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker().isMyChecker() and \
-                 board.get_cell((x - 2) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker().isMyChecker():
+            if   board.get_cell((x) % 8, y).get_checker() is not None and \
+                            board.get_cell((x - 1) % 8, y).get_checker() is not None and \
+                            board.get_cell((x - 2) % 8, y).get_checker() is not None and \
+                            board.get_cell((x - 1) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker().isMyChecker() and \
+                            board.get_cell((x - 2) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker().isMyChecker():
                 return True
 
-            if   board.get_cell((x) % 8, y).get_checker() is not None and\
-                 board.get_cell((x + 1) % 8, y).get_checker() is not None and\
-                 board.get_cell((x + 2) % 8, y).get_checker() is not None and\
-                 board.get_cell((x + 1) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker() and \
-                 board.get_cell((x + 2) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker():
+            if   board.get_cell((x) % 8, y).get_checker() is not None and \
+                            board.get_cell((x + 1) % 8, y).get_checker() is not None and \
+                            board.get_cell((x + 2) % 8, y).get_checker() is not None and \
+                            board.get_cell((x + 1) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker() and \
+                            board.get_cell((x + 2) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker():
                 return True
         else:
-            if   board.get_cell((x) % 8, y).get_checker() is not None and\
-                 board.get_cell((x - 1) % 8, y).get_checker() is not None and\
-                 board.get_cell((x + 1) % 8, y).get_checker() is not None and\
-                 board.get_cell((x - 1) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker().isMyChecker() and \
-                 board.get_cell((x + 1) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker().isMyChecker():
+            if   board.get_cell((x) % 8, y).get_checker() is not None and \
+                            board.get_cell((x - 1) % 8, y).get_checker() is not None and \
+                            board.get_cell((x + 1) % 8, y).get_checker() is not None and \
+                            board.get_cell((x - 1) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker().isMyChecker() and \
+                            board.get_cell((x + 1) % 8, y).get_checker().isMyChecker() == board.get_cell(x, y).get_checker().isMyChecker():
                 return True
         return False
 
